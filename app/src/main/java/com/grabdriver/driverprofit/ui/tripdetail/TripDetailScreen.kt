@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grabdriver.driverprofit.data.local.entity.TripRecordEntity
+import com.grabdriver.driverprofit.ui.components.AutoSelectTextField
 import com.grabdriver.driverprofit.ui.components.DatePickerModal
 import com.grabdriver.driverprofit.ui.theme.CostOrange
 import com.grabdriver.driverprofit.ui.theme.GrabGreen
@@ -319,7 +320,7 @@ fun TripDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            OutlinedTextField(
+                            AutoSelectTextField(
                                 value = fareText,
                                 onValueChange = { fareText = it },
                                 label = { Text("ค่ารอบ (฿)") },
@@ -328,7 +329,7 @@ fun TripDetailScreen(
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
-                            OutlinedTextField(
+                            AutoSelectTextField(
                                 value = tipText,
                                 onValueChange = { tipText = it },
                                 label = { Text("ทิป (฿)") },
@@ -342,7 +343,7 @@ fun TripDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            OutlinedTextField(
+                            AutoSelectTextField(
                                 value = distanceText,
                                 onValueChange = { distanceText = it },
                                 label = { Text("ระยะทาง (กม.)") },
@@ -351,7 +352,7 @@ fun TripDetailScreen(
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
-                            OutlinedTextField(
+                            AutoSelectTextField(
                                 value = dashKmLText,
                                 onValueChange = { dashKmLText = it },
                                 label = { Text("หน้าปัด (km/L)") },
@@ -361,7 +362,7 @@ fun TripDetailScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        OutlinedTextField(
+                        AutoSelectTextField(
                             value = durationText,
                             onValueChange = { durationText = it },
                             label = { Text("เวลารวมในรอบ (นาที)") },

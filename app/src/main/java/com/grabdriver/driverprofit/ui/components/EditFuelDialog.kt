@@ -37,7 +37,7 @@ fun EditFuelDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
+                AutoSelectTextField(
                     value = priceText,
                     onValueChange = { priceText = it },
                     label = { Text("ราคาน้ำมัน (บาท/ลิตร)") },

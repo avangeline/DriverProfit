@@ -83,10 +83,10 @@ fun AddTipDialog(
                     }
                 }
 
-                // ปุ่มลัดทิปยอดนิยมใน Grab
+                // ปุ่มลัดทิปยอดนิยมใน Grab (กดสะสมยอดได้)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "เลือกยอดทิปที่ลูกค้ากดให้:",
+                        text = "เลือกยอดทิปที่ลูกค้ากดให้ (กดสะสมได้):",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -94,30 +94,36 @@ fun AddTipDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf(10, 20, 30, 50, 100).forEach { amount ->
+                        listOf(1, 5, 10, 20, 50).forEach { amount ->
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (currentTip == amount.toDouble()) GrabGreen else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(50.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(50.dp))
                                     .clickable {
-                                        tipInputText = amount.toString()
+                                        val current = tipInputText.toDoubleOrNull() ?: 0.0
+                                        tipInputText = (current + amount).toInt().toString()
                                     }
                             ) {
-                                Text(
-                                    text = "+$amount",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (currentTip == amount.toDouble()) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface
-                                )
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "+$amount",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // หรือกรอกตัวเลขทิปเอง
-                OutlinedTextField(
+                // หรือกรอกตัวเลขทิปเอง (แตะแล้วไฮไลต์ทั้งหมด)
+                AutoSelectTextField(
                     value = tipInputText,
                     onValueChange = { tipInputText = it },
                     label = { Text("ระบุยอดทิป (บาท)") },

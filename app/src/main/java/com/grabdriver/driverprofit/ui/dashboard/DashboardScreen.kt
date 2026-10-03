@@ -51,7 +51,7 @@ fun DashboardScreen(
     val fuelPrice by viewModel.fuelPrice.collectAsState()
     val defaultDashKmL by viewModel.defaultDashKmL.collectAsState()
     val selectedDateString by viewModel.selectedDateString.collectAsState()
-    val isToday = viewModel.isSelectedDateToday()
+    val isToday = selectedDateString == viewModel.todayDateString
 
     var showQuickEntrySheet by remember { mutableStateOf(false) }
     var showDatePickerDialog by remember { mutableStateOf(false) }

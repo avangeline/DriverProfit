@@ -24,8 +24,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,6 +61,8 @@ fun QuickEntryBottomSheet(
     ) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val grabCollectFocusRequester = remember { FocusRequester() }
     val calculateUseCase = remember { CalculateTripUseCase() }
 
     var selectedDateString by remember { mutableStateOf(initialDateString) }
@@ -64,7 +70,11 @@ fun QuickEntryBottomSheet(
 
     var fareText by remember { mutableStateOf("") }
     var distanceText by remember { mutableStateOf("") }
-    var dashKmLText by remember { mutableStateOf(if (defaultDashKmL > 0) String.format(Locale.US, "%.1f", defaultDashKmL) else "50.0") }
+    val initialDashKmL = remember(defaultDashKmL) {
+        if (defaultDashKmL > 0) String.format(Locale.US, "%.1f", defaultDashKmL) else "50.0"
+    }
+    var lastValidDashKmL by remember { mutableStateOf(initialDashKmL) }
+    var dashKmLText by remember { mutableStateOf(initialDashKmL) }
     var durationText by remember { mutableStateOf("") }
     var tipText by remember { mutableStateOf("") }
     var showCashTipCalculator by remember { mutableStateOf(false) }
@@ -202,12 +212,12 @@ fun QuickEntryBottomSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // แถวที่ 1: ค่ารอบ & ระยะทาง (ช่องจำเป็น)
+            // แถวที่ 1: ค่ารอบ & ระยะทาง (ช่องจำเป็น - แตะแล้วไฮไลต์ทั้งหมด)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                AutoSelectTextField(
                     value = fareText,
                     onValueChange = { fareText = it },
                     label = { Text("ค่ารอบ (บาท) *") },
@@ -221,7 +231,7 @@ fun QuickEntryBottomSheet(
                     modifier = Modifier.weight(1f)
                 )
 
-                OutlinedTextField(
+                AutoSelectTextField(
                     value = distanceText,
                     onValueChange = { distanceText = it },
                     label = { Text("ระยะทาง (กม.) *") },
@@ -243,12 +253,66 @@ fun QuickEntryBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
+                AutoSelectTextField(
                     value = dashKmLText,
-                    onValueChange = { dashKmLText = it },
+                    onValueChange = { newVal ->
+                        dashKmLText = newVal
+                        val num = newVal.toDoubleOrNull()
+                        if (num != null && num > 0.0) {
+                            lastValidDashKmL = newVal
+                        }
+                    },
                     label = { Text("หน้าปัด (km/L)") },
                     leadingIcon = {
                         Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(50.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(RoundedCornerShape(50.dp))
+                                    .clickable {
+                                        val curr = dashKmLText.toDoubleOrNull() ?: lastValidDashKmL.toDoubleOrNull() ?: 50.0
+                                        val next = String.format(Locale.US, "%.1f", kotlin.math.max(1.0, curr - 0.1))
+                                        dashKmLText = next
+                                        lastValidDashKmL = next
+                                    }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("−", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(RoundedCornerShape(50.dp))
+                                    .clickable {
+                                        val curr = dashKmLText.toDoubleOrNull() ?: lastValidDashKmL.toDoubleOrNull() ?: 50.0
+                                        val next = String.format(Locale.US, "%.1f", curr + 0.1)
+                                        dashKmLText = next
+                                        lastValidDashKmL = next
+                                    }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("+", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    },
+                    onBlur = {
+                        val num = dashKmLText.toDoubleOrNull()
+                        if (dashKmLText.isBlank() || num == null || num <= 0.0) {
+                            dashKmLText = lastValidDashKmL
+                        }
                     },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
@@ -259,7 +323,7 @@ fun QuickEntryBottomSheet(
                     modifier = Modifier.weight(1f)
                 )
 
-                OutlinedTextField(
+                AutoSelectTextField(
                     value = durationText,
                     onValueChange = { durationText = it },
                     label = { Text("เวลารวม (นาที)") },
@@ -279,98 +343,88 @@ fun QuickEntryBottomSheet(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // ปุ่มลัดทิป (Quick Tip Chips) และตัวคำนวณทิปเงินสด
+            // ปุ่มเพิ่มทิป + cash tip calculator
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // แถวที่ 1: เพิ่มทิป (+1, +5, +10, +20), ปุ่มเปิดคิดเงินสด, และปุ่มล้าง (ถ้ามีทิป)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "ทิปสด:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    listOf(1, 5, 10, 20).forEach { amount ->
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable {
-                                    val current = tipText.toDoubleOrNull() ?: 0.0
-                                    tipText = (current + amount).toInt().toString()
-                                }
+                // Material UI–style deletable chip
+                // ไม่มีทิป → ปุ่ม "💵 เพิ่มทิป"   |   มีทิป → pill chip [ทิป ฿20  ●✕]
+                if (tip > 0.0) {
+                    // ── Deletable chip (pill shape เดียว กด body = เปิด calculator) ──
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = GrabGreen,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable { showCashTipCalculator = !showCashTipCalculator }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "+$amount",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium
+                                text = "ทิป ฿${tip.toInt()}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
-                        }
-                    }
-
-                    // ปุ่มเปิดคำนวณทิปจากเงินสด
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (showCashTipCalculator) GrabGreen.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable {
-                                showCashTipCalculator = !showCashTipCalculator
-                            }
-                    ) {
-                        Text(
-                            text = "💵 เงินสด",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (showCashTipCalculator) GrabGreen else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    if (tip > 0.0) {
-                        Text(
-                            text = "฿${tip.toInt()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = GrabGreen,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        // ปุ่มล้างทิป (กรณีเผลอกด)
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable {
-                                    tipText = ""
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            // วงกลม delete — nested clickable แยกจาก chip body
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(RoundedCornerShape(50.dp))
+                                    .background(Color.White.copy(alpha = 0.25f))
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) {
+                                        tipText = ""
+                                        grabCollectText = ""
+                                        cashReceivedText = ""
+                                    }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "ล้างทิป",
+                                    contentDescription = "ยกเลิกทิป",
                                     modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                                Text(
-                                    text = "ล้าง",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
+                                    tint = Color.White
                                 )
                             }
                         }
+                    }
+                } else {
+                    // ── ปุ่มปกติ: เพิ่มทิป ──
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = if (showCashTipCalculator) GrabGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable { showCashTipCalculator = !showCashTipCalculator }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(text = "💵", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                text = "เพิ่มทิป",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (showCashTipCalculator) GrabGreen else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                LaunchedEffect(showCashTipCalculator) {
+                    if (showCashTipCalculator) {
+                        delay(150)
+                        grabCollectFocusRequester.requestFocus()
+                        keyboardController?.show()
                     }
                 }
 
@@ -420,16 +474,18 @@ fun QuickEntryBottomSheet(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                OutlinedTextField(
+                                AutoSelectTextField(
                                     value = grabCollectText,
                                     onValueChange = { grabCollectText = it },
                                     label = { Text("ยอดเก็บตามแอป (฿)") },
                                     placeholder = { Text("เช่น 85") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(grabCollectFocusRequester)
                                 )
-                                OutlinedTextField(
+                                AutoSelectTextField(
                                     value = cashReceivedText,
                                     onValueChange = { cashReceivedText = it },
                                     label = { Text("ลูกค้าจ่ายจริง (฿)") },
@@ -440,33 +496,95 @@ fun QuickEntryBottomSheet(
                                 )
                             }
 
-                            // ปุ่มลัดยอดเงินที่ลูกค้ามักจะจ่าย (ธนบัตร 100, 500, 1000)
-                            Row(
+                            // chip +N สำหรับกดสะสมยอดลูกค้าจ่ายจริง (MUI pill style)
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = "แบงก์:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                listOf(100, 500, 1000).forEach { bill ->
+                                // แถว 1: +1  +5  +10  +20  +50
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "จ่าย:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.width(44.dp)
+                                    )
+                                    listOf(1, 5, 10, 20, 50).forEach { amount ->
+                                        Surface(
+                                            shape = RoundedCornerShape(50.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(50.dp))
+                                                .clickable {
+                                                    val current = cashReceivedText.toDoubleOrNull() ?: 0.0
+                                                    cashReceivedText = (current + amount).toInt().toString()
+                                                }
+                                        ) {
+                                            Text(
+                                                text = "+$amount",
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                                // แถว 2: +100  +500  +1000  [ล้าง]
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Spacer(modifier = Modifier.width(44.dp))
+                                    listOf(100, 500, 1000).forEach { amount ->
+                                        Surface(
+                                            shape = RoundedCornerShape(50.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(50.dp))
+                                                .clickable {
+                                                    val current = cashReceivedText.toDoubleOrNull() ?: 0.0
+                                                    cashReceivedText = (current + amount).toInt().toString()
+                                                }
+                                        ) {
+                                            Text(
+                                                text = "+$amount",
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                    // ปุ่มล้าง — pill สีแดงอ่อน
                                     Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = RoundedCornerShape(50.dp),
+                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                cashReceivedText = bill.toString()
-                                            }
+                                            .clip(RoundedCornerShape(50.dp))
+                                            .clickable { cashReceivedText = "" }
                                     ) {
-                                        Text(
-                                            text = "฿$bill",
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "ล้าง",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                            Text(
+                                                text = "ล้าง",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
                                     }
                                 }
                             }
