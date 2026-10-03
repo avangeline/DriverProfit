@@ -1,0 +1,102 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Inactive Gauge Arc -->
+    <path
+        android:pathData="M26.37,81.63 A39.02,39.02 0 1,1 81.63,81.63"
+        android:strokeColor="#1E293B"
+        android:strokeWidth="4.64"
+        android:strokeLineCap="round" />
+
+    <!-- Active Glowing Speed Track (Neon Green) -->
+    <path
+        android:pathData="M26.37,81.63 A39.02,39.02 0 1,1 82.9,27.84"
+        android:strokeColor="#00E676"
+        android:strokeWidth="4.64"
+        android:strokeLineCap="round" />
+
+    <!-- Gauge Ticks -->
+    <path android:pathData="M32.22,75.78L30.14,77.86" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M25.65,66.03L22.93,67.19" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M23.21,54.54L20.26,54.59" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M25.25,42.96L22.49,41.91" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M31.48,33.00L29.32,30.98" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M40.98,26.09L39.74,23.41" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M52.39,23.25L52.23,20.30" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M64.03,24.88L64.99,22.09" android:strokeColor="#00E676" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M74.20,30.76L76.14,28.53" android:strokeColor="#00E676" android:strokeWidth="1.2" android:strokeLineCap="round" />
+    <path android:pathData="M81.44,40.02L84.07,38.68" android:strokeColor="#334155" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M84.68,51.32L87.62,51.06" android:strokeColor="#334155" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M83.45,63.00L86.28,63.87" android:strokeColor="#334155" android:strokeWidth="0.8" android:strokeLineCap="round" />
+    <path android:pathData="M77.93,73.38L80.23,75.24" android:strokeColor="#334155" android:strokeWidth="0.8" android:strokeLineCap="round" />
+
+    <!-- Needle Polygon (Ascending Arrow) -->
+    <path
+        android:pathData="M54,54 L52.1,52.73 L81.84,29.11 Z"
+        android:fillColor="#00E676" />
+    <path
+        android:pathData="M54,54 L52.73,52.1 L81.84,29.11 Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.75" />
+    <path
+        android:pathData="M78.89,25.73 L85.64,27.0 L83.11,33.33 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Center Hub Outer Circle -->
+    <path
+        android:pathData="M54,33.75 A20.25,20.25 0 1,0 54,74.25 A20.25,20.25 0 1,0 54,33.75 Z"
+        android:fillColor="#0A111E"
+        android:strokeColor="#00E676"
+        android:strokeWidth="0.84" />
+
+    <!-- Center Hub Inner Background -->
+    <path
+        android:pathData="M54,36.7 A17.3,17.3 0 1,0 54,71.3 A17.3,17.3 0 1,0 54,36.7 Z"
+        android:fillColor="#101C2E" />
+
+    <!-- Thai Baht Vertical Core Bar -->
+    <path
+        android:pathData="M52.52,40.08 h2.95 v27.84 h-2.95 z"
+        android:fillColor="#00E676" />
+    <path
+        android:pathData="M53.16,40.92 h1.69 v26.16 h-1.69 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Letter B Spine & Bowls -->
+    <path
+        android:pathData="M49.36,43.88 L58.01,43.88 C62.86,43.88 65.39,46.2 65.39,49.78 C65.39,53.37 62.44,54.42 58.01,54.42 L49.36,54.42 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.74"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M49.36,54.42 L59.06,54.42 C64.12,54.42 66.87,56.74 66.87,60.75 C66.87,64.97 63.49,66.66 58.01,66.66 L49.36,66.66 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.74"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Inner Core Green Accent in B -->
+    <path
+        android:pathData="M49.99,44.3 L57.8,44.3 C62.02,44.3 64.12,46.2 64.12,49.78 C64.12,52.95 61.59,54.0 57.8,54.0 L49.99,54.0 Z"
+        android:strokeColor="#00E676"
+        android:strokeWidth="0.84"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M49.99,54.0 L58.64,54.0 C62.86,54.0 65.18,56.32 65.18,60.75 C65.18,64.55 62.23,66.23 57.8,66.23 L49.99,66.23 Z"
+        android:strokeColor="#00E676"
+        android:strokeWidth="0.84"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Bottom Speed Chevron Accent -->
+    <path
+        android:pathData="M43.45,90.7 L54,87.33 L64.55,90.7"
+        android:strokeColor="#00B14F"
+        android:strokeWidth="0.95"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
