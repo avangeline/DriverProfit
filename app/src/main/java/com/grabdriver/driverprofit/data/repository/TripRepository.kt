@@ -33,4 +33,7 @@ interface TripRepository {
     suspend fun updateFuelPriceForDate(dateString: String, price: Double)
 
     fun getDailySummary(dateString: String): Flow<DailySummary>
+
+    val isIdleCalculationEnabled: Flow<Boolean>
+    suspend fun setIdleCalculationEnabled(enabled: Boolean)
 }

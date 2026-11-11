@@ -48,6 +48,7 @@ import kotlin.math.abs
 fun TripDetailScreen(
     trip: TripRecordEntity,
     tripNumber: Int,
+    isIdleCalculationEnabled: Boolean = true,
     onBack: () -> Unit,
     onDeleteTrip: () -> Unit,
     onSaveEdit: (
@@ -86,12 +87,14 @@ fun TripDetailScreen(
     val displayDistance = if (isEditing) distance else trip.distanceKm
     val displayEffectiveKmL = if (isEditing) {
         val movingFuel = if (dashKmL > 0) distance / dashKmL else 0.0
-        val totalFuel = movingFuel + trip.idleFuelEstimate()
+        val idleFuel = if (isIdleCalculationEnabled) trip.idleFuelEstimate() else 0.0
+        val totalFuel = movingFuel + idleFuel
         if (totalFuel > 0) distance / totalFuel else dashKmL
     } else trip.effectiveKmL
     val displayFuelCost = if (isEditing) {
         val movingFuel = if (dashKmL > 0) distance / dashKmL else 0.0
-        (movingFuel + trip.idleFuelEstimate()) * trip.fuelPricePerLiter
+        val idleFuel = if (isIdleCalculationEnabled) trip.idleFuelEstimate() else 0.0
+        (movingFuel + idleFuel) * trip.fuelPricePerLiter
     } else trip.fuelCost
     val displayNetProfit = displayFare + displayTip - displayFuelCost
     val totalIncome = displayFare + displayTip
@@ -136,8 +139,14 @@ fun TripDetailScreen(
                             },
                             label = "TripTitleAnim"
                         ) { editing ->
+                            val isDeadhead = trip.fare == 0.0
+                            val tripTitle = if (isDeadhead) {
+                                if (editing) "แก้ไขรอบตีรถเปล่า" else "รอบตีรถเปล่า"
+                            } else {
+                                if (editing) "แก้ไขรอบวิ่ง #$tripNumber" else "รอบวิ่ง #$tripNumber"
+                            }
                             Text(
-                                text = if (editing) "แก้ไขรอบวิ่ง #$tripNumber" else "รอบวิ่ง #$tripNumber",
+                                text = tripTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -193,7 +202,7 @@ fun TripDetailScreen(
 
                                 Button(
                                     onClick = {
-                                        val d = durationText.toIntOrNull() ?: trip.durationMinutes
+                                        val d = if (isIdleCalculationEnabled) (durationText.toIntOrNull() ?: trip.durationMinutes) else 0
                                         onSaveEdit(fare, tip, distance, dashKmL, d, editDateString)
                                         isEditing = false
                                     },
@@ -362,15 +371,17 @@ fun TripDetailScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        AutoSelectTextField(
-                            value = durationText,
-                            onValueChange = { durationText = it },
-                            label = { Text("เวลารวมในรอบ (นาที)") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (isIdleCalculationEnabled) {
+                            AutoSelectTextField(
+                                value = durationText,
+                                onValueChange = { durationText = it },
+                                label = { Text("เวลารวมในรอบ (นาที)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
@@ -402,10 +413,15 @@ fun TripDetailScreen(
                         },
                         label = "DetailProfitAnim"
                     ) { profit ->
-                        val profitColor = if (profit >= 0) GrabGreen else MaterialTheme.colorScheme.error
-                        val profitSign = if (profit >= 0) "+" else ""
+                        val isNegative = profit < 0.0
+                        val profitColor = if (isNegative) MaterialTheme.colorScheme.error else GrabGreen
+                        val profitText = if (isNegative) {
+                            String.format(Locale.US, "-฿%.2f", abs(profit))
+                        } else {
+                            String.format(Locale.US, "+฿%.2f", profit)
+                        }
                         Text(
-                            text = "$profitSign${String.format(Locale.US, "฿%.2f", profit)}",
+                            text = profitText,
                             fontSize = 34.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = profitColor
@@ -500,14 +516,16 @@ fun TripDetailScreen(
                     DetailRow("เวลาที่บันทึก", SimpleDateFormat("HH:mm น.", Locale.getDefault()).format(Date(trip.timestamp)))
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                    DetailRow("ค่ารอบ", "฿${String.format(Locale.US, "%.2f", displayFare)}")
+                    DetailRow("ค่ารอบ", if (displayFare == 0.0) "฿0.00 (ตีรถเปล่า)" else "฿${String.format(Locale.US, "%.2f", displayFare)}")
                     if (displayTip > 0) DetailRow("ทิป", "+฿${String.format(Locale.US, "%.2f", displayTip)}", valueColor = GrabGreen)
                     DetailRow("รายรับรวม", "฿${String.format(Locale.US, "%.2f", totalIncome)}", bold = true)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     DetailRow("ระยะทาง", "${String.format(Locale.US, "%.2f", displayDistance)} กม.")
-                    DetailRow("เวลาในรอบ", "${trip.durationMinutes} นาที")
-                    if (trip.estimatedIdleMinutes > 0) {
+                    if (isIdleCalculationEnabled && trip.durationMinutes > 0) {
+                        DetailRow("เวลาในรอบ", "${trip.durationMinutes} นาที")
+                    }
+                    if (isIdleCalculationEnabled && trip.estimatedIdleMinutes > 0) {
                         DetailRow("จอดนิ่ง/รถติดโดยประมาณ", "~${trip.estimatedIdleMinutes} นาที", valueColor = IdleAmber)
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
@@ -528,7 +546,11 @@ fun TripDetailScreen(
                     // กำไร/ขาดทุน สรุปท้ายสุด
                     DetailRow(
                         label = if (displayNetProfit >= 0) "✅ กำไรสุทธิ" else "❌ ขาดทุน",
-                        value = "${if (displayNetProfit >= 0) "+" else ""}฿${String.format(Locale.US, "%.2f", displayNetProfit)}",
+                        value = if (displayNetProfit >= 0) {
+                            "+฿${String.format(Locale.US, "%.2f", displayNetProfit)}"
+                        } else {
+                            "-฿${String.format(Locale.US, "%.2f", abs(displayNetProfit))}"
+                        },
                         valueColor = if (displayNetProfit >= 0) GrabGreen else MaterialTheme.colorScheme.error,
                         bold = true
                     )
@@ -548,16 +570,17 @@ fun TripDetailScreen(
             }
 
     if (showDeleteDialog) {
+        val tripLabel = if (trip.fare == 0.0) "รอบตีรถเปล่า" else "รอบวิ่ง #$tripNumber"
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = {
                 Text(
-                    text = "ยืนยันการลบรอบวิ่ง #$tripNumber",
+                    text = "ยืนยันการลบ$tripLabel",
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
-                Text("คุณต้องการลบบันทึกรอบวิ่งนี้ใช่หรือไม่? ข้อมูลจะไม่สามารถกู้คืนได้")
+                Text("คุณต้องการลบบันทึก$tripLabel นี้ใช่หรือไม่? ข้อมูลจะไม่สามารถกู้คืนได้")
             },
             confirmButton = {
                 Button(

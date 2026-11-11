@@ -13,22 +13,25 @@ class CalculateTripUseCase {
         durationMinutes: Int,
         fuelPricePerLiter: Double,
         vehicleType: String = "MOTORCYCLE",
-        idleLiterPerHour: Double = 0.15
+        idleLiterPerHour: Double = 0.15,
+        isIdleCalculationEnabled: Boolean = true
     ): TripCalculationResult {
         // 1. น้ำมันที่ใช้ขณะรถเคลื่อนที่ตามหน้าปัด
         val movingFuelLiters = if (dashKmL > 0.0) distanceKm / dashKmL else 0.0
 
-        // 2. ประมาณการเวลาที่ใช้เดินทางปกติ (ความเร็วปกติในเมือง มอไซค์ ~35 km/h, รถยนต์ ~30 km/h)
-        val normalMovingSpeedKmH = if (vehicleType == "MOTORCYCLE") 35.0 else 30.0
-        val expectedMovingMinutes = if (normalMovingSpeedKmH > 0.0) {
-            (distanceKm / normalMovingSpeedKmH) * 60.0
-        } else 0.0
-
-        // เวลาที่จอดแช่/รถติด/รอผู้โดยสาร (เวลารวม - เวลาที่ควรใช้วิ่ง)
-        val estimatedIdleMinutes = max(0, durationMinutes - expectedMovingMinutes.roundToInt())
+        // 2. ประมาณการเวลาที่ใช้เดินทางปกติและน้ำมัน Idling (เมื่อเปิดใช้งาน)
+        val estimatedIdleMinutes = if (isIdleCalculationEnabled && durationMinutes > 0) {
+            val normalMovingSpeedKmH = if (vehicleType == "MOTORCYCLE") 35.0 else 30.0
+            val expectedMovingMinutes = if (normalMovingSpeedKmH > 0.0) {
+                (distanceKm / normalMovingSpeedKmH) * 60.0
+            } else 0.0
+            max(0, durationMinutes - expectedMovingMinutes.roundToInt())
+        } else 0
 
         // 3. ปริมาณน้ำมันที่เสียไปตอนจอดเดินเบา (Idling)
-        val idleFuelLiters = (estimatedIdleMinutes.toDouble() / 60.0) * idleLiterPerHour
+        val idleFuelLiters = if (isIdleCalculationEnabled) {
+            (estimatedIdleMinutes.toDouble() / 60.0) * idleLiterPerHour
+        } else 0.0
 
         // 4. ปริมาณน้ำมันจริงรวมทั้งรอบ
         val totalFuelLiters = movingFuelLiters + idleFuelLiters

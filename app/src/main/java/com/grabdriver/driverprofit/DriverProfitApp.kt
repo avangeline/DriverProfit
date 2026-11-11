@@ -11,5 +11,5 @@ class DriverProfitApp : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob())
 
     val database by lazy { AppDatabase.getDatabase(this, applicationScope) }
-    val repository: TripRepository by lazy { TripRepositoryImpl(database) }
+    val repository: TripRepository by lazy { TripRepositoryImpl(database, this) }
 }

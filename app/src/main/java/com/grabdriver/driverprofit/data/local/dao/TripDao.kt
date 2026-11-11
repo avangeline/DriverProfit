@@ -6,19 +6,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TripDao {
-    @Query("SELECT * FROM trip_records WHERE dateString = :dateString ORDER BY timestamp DESC")
+    @Query("SELECT * FROM trip_records WHERE dateString = :dateString ORDER BY timestamp DESC, id DESC")
     fun getTripsForDate(dateString: String): Flow<List<TripRecordEntity>>
 
-    @Query("SELECT * FROM trip_records WHERE dateString = :dateString ORDER BY timestamp DESC")
+    @Query("SELECT * FROM trip_records WHERE dateString = :dateString ORDER BY timestamp DESC, id DESC")
     suspend fun getTripsForDateDirect(dateString: String): List<TripRecordEntity>
 
-    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC")
+    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC, id DESC")
     fun getAllTrips(): Flow<List<TripRecordEntity>>
 
-    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC")
+    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC, id DESC")
     suspend fun getAllTripsDirect(): List<TripRecordEntity>
 
-    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM trip_records ORDER BY timestamp DESC, id DESC LIMIT 1")
     suspend fun getLatestTrip(): TripRecordEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -26,6 +26,9 @@ interface TripDao {
 
     @Update
     suspend fun updateTrip(trip: TripRecordEntity)
+
+    @Update
+    suspend fun updateTrips(trips: List<TripRecordEntity>)
 
     @Delete
     suspend fun deleteTrip(trip: TripRecordEntity)

@@ -56,16 +56,17 @@ fun TripItemCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val isDeadhead = trip.fare == 0.0
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = GrabGreen.copy(alpha = 0.12f)
+                        color = if (isDeadhead) CostOrange.copy(alpha = 0.15f) else GrabGreen.copy(alpha = 0.12f)
                     ) {
                         Text(
-                            text = "#$tripNumber",
+                            text = if (isDeadhead) "ตีรถเปล่า" else "#$tripNumber",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = GrabGreen
+                            color = if (isDeadhead) CostOrange else GrabGreen
                         )
                     }
                     Text(
@@ -75,11 +76,19 @@ fun TripItemCard(
                     )
                 }
 
+                val isNegative = trip.netProfit < 0.0
+                val profitFormatted = if (isNegative) {
+                    String.format(Locale.US, "-฿%.2f", kotlin.math.abs(trip.netProfit))
+                } else {
+                    String.format(Locale.US, "+฿%.2f", trip.netProfit)
+                }
+                val profitColor = if (isNegative) MaterialTheme.colorScheme.error else GrabGreen
+
                 Text(
-                    text = String.format(Locale.US, "+฿%.2f", trip.netProfit),
+                    text = profitFormatted,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    color = GrabGreen
+                    color = profitColor
                 )
             }
 
@@ -96,26 +105,29 @@ fun TripItemCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "ค่ารอบ: ฿${String.format(Locale.US, "%.0f", trip.fare)}",
+                        text = if (trip.fare == 0.0) "ค่ารอบ: ฿0 (ตีรถเปล่า)" else "ค่ารอบ: ฿${String.format(Locale.US, "%.0f", trip.fare)}",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = if (trip.fare == 0.0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                     )
 
                     // ปุ่มกดเพิ่มทิปย้อนหลัง (ถ้าลูกค้าเพิ่งกดให้ในแอป Grab)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (trip.tip > 0) GrabGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onAddOrEditTip() }
-                    ) {
-                        Text(
-                            text = if (trip.tip > 0) "ทิป ฿${String.format(Locale.US, "%.0f", trip.tip)} ✏️" else "+ ทิป",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (trip.tip > 0) GrabGreen else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    if (trip.fare > 0.0 || trip.tip > 0.0) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (trip.tip > 0) GrabGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onAddOrEditTip() }
+                        ) {
+                            Text(
+                                text = if (trip.tip > 0) "ทิป ฿${String.format(Locale.US, "%.0f", trip.tip)} ✏️" else "+ ทิป",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (trip.tip > 0) GrabGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 

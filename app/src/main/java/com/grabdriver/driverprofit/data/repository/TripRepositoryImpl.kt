@@ -1,20 +1,35 @@
 package com.grabdriver.driverprofit.data.repository
 
+import android.content.Context
 import com.grabdriver.driverprofit.data.local.AppDatabase
 import com.grabdriver.driverprofit.data.local.entity.DailyFuelSettingEntity
 import com.grabdriver.driverprofit.data.local.entity.TripRecordEntity
 import com.grabdriver.driverprofit.data.local.entity.VehicleProfileEntity
 import com.grabdriver.driverprofit.domain.model.DailySummary
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 
 class TripRepositoryImpl(
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val context: Context
 ) : TripRepository {
 
     private val tripDao = database.tripDao()
     private val vehicleDao = database.vehicleDao()
     private val dailyFuelDao = database.dailyFuelDao()
+
+    private val prefs = context.getSharedPreferences("driver_profit_prefs", Context.MODE_PRIVATE)
+    private val _isIdleCalculationEnabled = MutableStateFlow(
+        prefs.getBoolean("KEY_IDLE_CALCULATION_ENABLED", true)
+    )
+    override val isIdleCalculationEnabled: Flow<Boolean> = _isIdleCalculationEnabled.asStateFlow()
+
+    override suspend fun setIdleCalculationEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("KEY_IDLE_CALCULATION_ENABLED", enabled).apply()
+        _isIdleCalculationEnabled.value = enabled
+    }
 
     override fun getTripsForDate(dateString: String): Flow<List<TripRecordEntity>> {
         return tripDao.getTripsForDate(dateString)
@@ -119,6 +134,21 @@ class TripRepositoryImpl(
             updatedAt = System.currentTimeMillis()
         )
         dailyFuelDao.insertOrUpdateFuelSetting(updated)
+
+        // อัปเดตราคาน้ำมันและการคำนวณของรอบวิ่งทั้งหมดในวันที่เลือก
+        val existingTrips = tripDao.getTripsForDateDirect(dateString)
+        if (existingTrips.isNotEmpty()) {
+            val updatedTrips = existingTrips.map { trip ->
+                val newFuelCost = trip.totalFuelUsedLiters * price
+                val newNetProfit = (trip.fare + trip.tip) - newFuelCost
+                trip.copy(
+                    fuelPricePerLiter = price,
+                    fuelCost = newFuelCost,
+                    netProfit = newNetProfit
+                )
+            }
+            tripDao.updateTrips(updatedTrips)
+        }
     }
 
     override fun getDailySummary(dateString: String): Flow<DailySummary> {
@@ -140,6 +170,7 @@ class TripRepositoryImpl(
             }
 
             val avgEffectiveKmL = if (totalFuelUsed > 0.0) distance / totalFuelUsed else 0.0
+            val paidTripsCount = trips.count { it.fare > 0.0 }
 
             DailySummary(
                 dateString = dateString,
@@ -147,7 +178,7 @@ class TripRepositoryImpl(
                 totalFuelCost = fuelCost,
                 totalNetProfit = netProfit,
                 totalDistanceKm = distance,
-                totalTripsCount = trips.size,
+                totalTripsCount = paidTripsCount,
                 averageEffectiveKmL = avgEffectiveKmL,
                 totalIdleMinutes = idleMinutes
             )

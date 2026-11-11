@@ -68,8 +68,14 @@ fun SummaryCard(
                 },
                 label = "ProfitNumberAnim"
             ) { profit ->
+                val isNegative = profit < 0.0
+                val profitText = if (isNegative) {
+                    String.format(Locale.US, "-฿ %.2f", kotlin.math.abs(profit))
+                } else {
+                    String.format(Locale.US, "฿ %.2f", profit)
+                }
                 Text(
-                    text = String.format(Locale.US, "฿ %.2f", profit),
+                    text = profitText,
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (profit >= 0.0) GrabGreen else MaterialTheme.colorScheme.error,

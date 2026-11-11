@@ -49,6 +49,7 @@ fun QuickEntryBottomSheet(
     fuelPricePerLiter: Double,
     vehicleType: String,
     idleLiterPerHour: Double,
+    isIdleCalculationEnabled: Boolean = true,
     initialDateString: String = DateUtils.getTodayDateString(),
     onDismiss: () -> Unit,
     onSaveTrip: (
@@ -88,20 +89,24 @@ fun QuickEntryBottomSheet(
     val duration = durationText.toIntOrNull() ?: 0
     val tip = tipText.toDoubleOrNull() ?: 0.0
 
-    val liveCalc: TripCalculationResult = remember(fare, tip, distance, dashKmL, duration, fuelPricePerLiter) {
+    val liveCalc: TripCalculationResult = remember(fare, tip, distance, dashKmL, duration, fuelPricePerLiter, isIdleCalculationEnabled) {
         calculateUseCase(
             fare = fare,
             tip = tip,
             distanceKm = distance,
             dashKmL = dashKmL,
-            durationMinutes = duration,
+            durationMinutes = if (isIdleCalculationEnabled) duration else 0,
             fuelPricePerLiter = fuelPricePerLiter,
             vehicleType = vehicleType,
-            idleLiterPerHour = idleLiterPerHour
+            idleLiterPerHour = idleLiterPerHour,
+            isIdleCalculationEnabled = isIdleCalculationEnabled
         )
     }
 
-    val isInputValid = fare > 0.0 && distance > 0.0
+    val fareEntered = fareText.toDoubleOrNull()
+    val isFareValid = fareText.isNotBlank() && fareEntered != null && fareEntered >= 0.0
+    val isDistanceValid = distance > 0.0
+    val isInputValid = isFareValid && isDistanceValid
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -217,19 +222,43 @@ fun QuickEntryBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                AutoSelectTextField(
-                    value = fareText,
-                    onValueChange = { fareText = it },
-                    label = { Text("ค่ารอบ (บาท) *") },
-                    placeholder = { Text("เช่น 120") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Next
-                    ),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) }),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    AutoSelectTextField(
+                        value = fareText,
+                        onValueChange = { fareText = it },
+                        label = { Text("ค่ารอบ (บาท) *") },
+                        placeholder = { Text("เช่น 120 หรือ 0") },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) }),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(50.dp),
+                        color = if (fareText == "0") CostOrange.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50.dp))
+                            .clickable {
+                                fareText = if (fareText == "0") "" else "0"
+                                if (fareText == "0") {
+                                    tipText = ""
+                                }
+                            }
+                    ) {
+                        Text(
+                            text = if (fareText == "0") "🚗 ตีรถเปล่า (0฿) ✓" else "🚗 ตีรถเปล่า (0฿)",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (fareText == "0") CostOrange else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 AutoSelectTextField(
                     value = distanceText,
@@ -316,29 +345,34 @@ fun QuickEntryBottomSheet(
                     },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Next
+                        imeAction = if (isIdleCalculationEnabled) ImeAction.Next else ImeAction.Done
                     ),
-                    keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) }),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocus(FocusDirection.Next) },
+                        onDone = { focusManager.clearFocus() }
+                    ),
                     singleLine = true,
-                    modifier = Modifier.weight(1f)
+                    modifier = if (isIdleCalculationEnabled) Modifier.weight(1f) else Modifier.fillMaxWidth()
                 )
 
-                AutoSelectTextField(
-                    value = durationText,
-                    onValueChange = { durationText = it },
-                    label = { Text("เวลารวม (นาที)") },
-                    placeholder = { Text("เช่น 20") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
+                if (isIdleCalculationEnabled) {
+                    AutoSelectTextField(
+                        value = durationText,
+                        onValueChange = { durationText = it },
+                        label = { Text("เวลารวม (นาที)") },
+                        placeholder = { Text("เช่น 20") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -662,11 +696,18 @@ fun QuickEntryBottomSheet(
                             },
                             label = "LiveCalcNetProfitAnim"
                         ) { profit ->
+                            val isNegative = profit < 0.0
+                            val profitColor = if (isNegative) MaterialTheme.colorScheme.error else GrabGreen
+                            val profitText = if (isNegative) {
+                                String.format(Locale.US, "ขาดทุนสุทธิ: -฿%.2f", kotlin.math.abs(profit))
+                            } else {
+                                String.format(Locale.US, "กำไรสุทธิ: +฿%.2f", profit)
+                            }
                             Text(
-                                text = String.format(Locale.US, "กำไรสุทธิ: +฿%.2f", profit),
+                                text = profitText,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = GrabGreen
+                                color = profitColor
                             )
                         }
                     }
@@ -707,7 +748,8 @@ fun QuickEntryBottomSheet(
             Button(
                 onClick = {
                     if (isInputValid) {
-                        onSaveTrip(fare, tip, distance, dashKmL, duration, selectedDateString)
+                        val durationMinutes = if (isIdleCalculationEnabled) duration else 0
+                        onSaveTrip(fare, tip, distance, dashKmL, durationMinutes, selectedDateString)
                         onDismiss()
                     }
                 },
@@ -724,7 +766,12 @@ fun QuickEntryBottomSheet(
                 Icon(Icons.Default.Check, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 val isToday = DateUtils.isToday(selectedDateString)
-                val btnText = if (isToday) "บันทึกรอบนี้ทันที" else "บันทึกรอบ (${DateUtils.formatThaiDateShort(selectedDateString)})"
+                val isDeadhead = fare == 0.0 && fareText.isNotBlank()
+                val btnText = if (isDeadhead) {
+                    if (isToday) "บันทึกรอบตีรถเปล่า" else "บันทึกรอบตีรถเปล่า (${DateUtils.formatThaiDateShort(selectedDateString)})"
+                } else {
+                    if (isToday) "บันทึกรอบนี้ทันที" else "บันทึกรอบ (${DateUtils.formatThaiDateShort(selectedDateString)})"
+                }
                 Text(
                     text = btnText,
                     style = MaterialTheme.typography.titleMedium,

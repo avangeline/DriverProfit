@@ -10,6 +10,7 @@ import com.grabdriver.driverprofit.data.local.entity.TripRecordEntity
 import com.grabdriver.driverprofit.data.local.entity.VehicleProfileEntity
 import com.grabdriver.driverprofit.data.repository.TripRepository
 import com.grabdriver.driverprofit.domain.model.DailySummary
+import com.grabdriver.driverprofit.domain.model.TripFilter
 import com.grabdriver.driverprofit.domain.usecase.CalculateTripUseCase
 import com.grabdriver.driverprofit.domain.usecase.ExportTripsToCsvUseCase
 import com.grabdriver.driverprofit.util.DateUtils
@@ -50,6 +51,22 @@ class DashboardViewModel(
         .flatMapLatest { date -> repository.getTripsForDate(date) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // ฟิลเตอร์แสดงรอบ: ทั้งหมด / เฉพาะรอบวิ่งที่ได้เงิน / รอบตีรถเปล่า (เริ่มต้นที่เฉพาะรอบที่ได้เงิน)
+    private val _tripFilter = MutableStateFlow(TripFilter.PAID_ONLY)
+    val tripFilter: StateFlow<TripFilter> = _tripFilter.asStateFlow()
+
+    val filteredTrips: StateFlow<List<TripRecordEntity>> = combine(trips, _tripFilter) { list, filter ->
+        when (filter) {
+            TripFilter.PAID_ONLY -> list.filter { it.fare > 0.0 }
+            TripFilter.ALL -> list
+            TripFilter.DEADHEAD -> list.filter { it.fare == 0.0 }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setTripFilter(filter: TripFilter) {
+        _tripFilter.value = filter
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val fuelPrice: StateFlow<Double> = _selectedDateString
         .flatMapLatest { date ->
@@ -68,6 +85,15 @@ class DashboardViewModel(
             vehicle?.defaultKmL ?: 50.0
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 50.0)
+
+    val isIdleCalculationEnabled: StateFlow<Boolean> = repository.isIdleCalculationEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setIdleCalculationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.setIdleCalculationEnabled(enabled)
+        }
+    }
 
     fun selectDate(dateString: String) {
         _selectedDateString.value = dateString
@@ -110,16 +136,19 @@ class DashboardViewModel(
 
             val vehicleType = vehicle?.vehicleType ?: "MOTORCYCLE"
             val idleRate = vehicle?.idleLiterPerHour ?: 0.15
+            val isIdleEnabled = isIdleCalculationEnabled.value
+            val effectiveDuration = if (isIdleEnabled) durationMinutes else 0
 
             val result = calculateTripUseCase(
                 fare = fare,
                 tip = tip,
                 distanceKm = distanceKm,
                 dashKmL = dashKmL,
-                durationMinutes = durationMinutes,
+                durationMinutes = effectiveDuration,
                 fuelPricePerLiter = fuelPriceForDate,
                 vehicleType = vehicleType,
-                idleLiterPerHour = idleRate
+                idleLiterPerHour = idleRate,
+                isIdleCalculationEnabled = isIdleEnabled
             )
 
             val tripTimestamp = DateUtils.createTimestampForDate(targetDateString)
@@ -131,7 +160,7 @@ class DashboardViewModel(
                 tip = tip,
                 distanceKm = distanceKm,
                 dashKmL = dashKmL,
-                durationMinutes = durationMinutes,
+                durationMinutes = effectiveDuration,
                 fuelPricePerLiter = fuelPriceForDate,
                 estimatedIdleMinutes = result.estimatedIdleMinutes,
                 effectiveKmL = result.effectiveKmL,
@@ -142,6 +171,13 @@ class DashboardViewModel(
             )
 
             repository.insertTrip(tripEntity)
+
+            // หากบันทึกรอบตีรถเปล่า แต่ตัวกรองอยู่ที่เฉพาะรอบได้เงิน ให้ปรับตัวกรอง เพื่อให้เห็นรอบที่เพิ่งบันทึก
+            if (fare == 0.0 && _tripFilter.value == TripFilter.PAID_ONLY) {
+                _tripFilter.value = TripFilter.DEADHEAD
+            } else if (fare > 0.0 && _tripFilter.value == TripFilter.DEADHEAD) {
+                _tripFilter.value = TripFilter.PAID_ONLY
+            }
 
             // สลับมุมมองไปยังวันที่บันทึก เพื่อให้ผู้ใช้เห็นข้อมูลที่เพิ่งใส่ทันที
             _selectedDateString.value = targetDateString
@@ -171,23 +207,23 @@ class DashboardViewModel(
             val vehicleType = vehicle?.vehicleType ?: "MOTORCYCLE"
             val idleRate = vehicle?.idleLiterPerHour ?: 0.15
 
-            val fuelPriceForDate = if (dateString != original.dateString) {
-                repository.getFuelSettingForDateDirect(dateString)?.fuelPricePerLiter
-                    ?: repository.getLatestFuelSetting()?.fuelPricePerLiter
-                    ?: original.fuelPricePerLiter
-            } else {
-                original.fuelPricePerLiter
-            }
+            val fuelPriceForDate = repository.getFuelSettingForDateDirect(dateString)?.fuelPricePerLiter
+                ?: repository.getLatestFuelSetting()?.fuelPricePerLiter
+                ?: original.fuelPricePerLiter
+
+            val isIdleEnabled = isIdleCalculationEnabled.value
+            val effectiveDuration = if (isIdleEnabled) durationMinutes else 0
 
             val result = calculateTripUseCase(
                 fare = fare,
                 tip = tip,
                 distanceKm = distanceKm,
                 dashKmL = dashKmL,
-                durationMinutes = durationMinutes,
+                durationMinutes = effectiveDuration,
                 fuelPricePerLiter = fuelPriceForDate,
                 vehicleType = vehicleType,
-                idleLiterPerHour = idleRate
+                idleLiterPerHour = idleRate,
+                isIdleCalculationEnabled = isIdleEnabled
             )
 
             val updatedTimestamp = if (dateString != original.dateString) {
@@ -204,7 +240,7 @@ class DashboardViewModel(
                     tip = tip,
                     distanceKm = distanceKm,
                     dashKmL = dashKmL,
-                    durationMinutes = durationMinutes,
+                    durationMinutes = effectiveDuration,
                     fuelPricePerLiter = fuelPriceForDate,
                     estimatedIdleMinutes = result.estimatedIdleMinutes,
                     effectiveKmL = result.effectiveKmL,

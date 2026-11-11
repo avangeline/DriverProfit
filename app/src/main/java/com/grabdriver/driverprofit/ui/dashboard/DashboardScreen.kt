@@ -7,16 +7,22 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ElectricBolt
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grabdriver.driverprofit.data.local.entity.TripRecordEntity
+import com.grabdriver.driverprofit.domain.model.TripFilter
 import com.grabdriver.driverprofit.ui.components.*
+import com.grabdriver.driverprofit.ui.theme.CostOrange
 import com.grabdriver.driverprofit.ui.theme.GrabGreen
 import com.grabdriver.driverprofit.ui.tripdetail.TripDetailScreen
 import com.grabdriver.driverprofit.util.DateUtils
@@ -46,17 +54,21 @@ fun DashboardScreen(
     val context = LocalContext.current
     val dailySummary by viewModel.dailySummary.collectAsState()
     val trips by viewModel.trips.collectAsState()
+    val tripFilter by viewModel.tripFilter.collectAsState()
+    val filteredTrips by viewModel.filteredTrips.collectAsState()
     val selectedVehicle by viewModel.selectedVehicle.collectAsState()
     val allVehicles by viewModel.allVehicles.collectAsState()
     val fuelPrice by viewModel.fuelPrice.collectAsState()
     val defaultDashKmL by viewModel.defaultDashKmL.collectAsState()
     val selectedDateString by viewModel.selectedDateString.collectAsState()
+    val isIdleCalculationEnabled by viewModel.isIdleCalculationEnabled.collectAsState()
     val isToday = selectedDateString == viewModel.todayDateString
 
     var showQuickEntrySheet by remember { mutableStateOf(false) }
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var showEditFuelDialog by remember { mutableStateOf(false) }
     var showVehicleDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var tripForAddTip by remember { mutableStateOf<TripRecordEntity?>(null) }
     // state สำหรับหน้ารายละเอียด/แก้ไขรอบ
     var tripForDetailId by remember { mutableStateOf<Long?>(null) }
@@ -67,6 +79,14 @@ fun DashboardScreen(
         if (currentDetailTrip != null) {
             lastDetailTrip = currentDetailTrip
         }
+    }
+
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // เมื่อเปลี่ยนวันที่ที่เลือก ให้เลื่อนกลับไปด้านบนสุด (item 0)
+    LaunchedEffect(selectedDateString) {
+        listState.scrollToItem(0)
     }
 
     AnimatedContent(
@@ -86,16 +106,20 @@ fun DashboardScreen(
     ) { detailId ->
         val activeTrip = if (detailId != null) (trips.firstOrNull { it.id == detailId } ?: lastDetailTrip) else null
         if (detailId != null && activeTrip != null) {
-            val tripIndex = trips.indexOfFirst { it.id == activeTrip.id }
-            val tripNumber = if (tripIndex != -1) trips.size - tripIndex else 1
+            val isDeadhead = activeTrip.fare == 0.0
+            val paidTripNumber = if (!isDeadhead) {
+                trips.filter { it.fare > 0.0 && (it.timestamp < activeTrip.timestamp || (it.timestamp == activeTrip.timestamp && it.id <= activeTrip.id)) }.size
+            } else 0
+            val tripLabel = if (isDeadhead) "รอบตีรถเปล่า" else "รอบ #$paidTripNumber"
 
             TripDetailScreen(
                 trip = activeTrip,
-                tripNumber = tripNumber,
+                tripNumber = paidTripNumber,
+                isIdleCalculationEnabled = isIdleCalculationEnabled,
                 onBack = { tripForDetailId = null },
                 onDeleteTrip = {
                     viewModel.deleteTrip(activeTrip)
-                    Toast.makeText(context, "ลบรอบ #$tripNumber เรียบร้อยแล้ว", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "ลบ$tripLabel เรียบร้อยแล้ว", Toast.LENGTH_SHORT).show()
                     tripForDetailId = null
                 },
                 onSaveEdit = { fare, tip, distanceKm, dashKmL, durationMinutes, dateString ->
@@ -108,7 +132,7 @@ fun DashboardScreen(
                         durationMinutes = durationMinutes,
                         dateString = dateString
                     )
-                    Toast.makeText(context, "แก้ไขข้อมูลรอบ #$tripNumber สำเร็จ!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "แก้ไขข้อมูล$tripLabel สำเร็จ!", Toast.LENGTH_SHORT).show()
                 }
             )
         } else {
@@ -156,13 +180,14 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(key = "dashboard_header") {
                 Spacer(modifier = Modifier.height(4.dp))
                 // แถวบน: ชื่อแอป และ ปุ่มกลับไปวันนี้ (กรณีดูย้อนหลัง)
                 Row(
@@ -178,19 +203,6 @@ fun DashboardScreen(
                                 fontWeight = FontWeight.Black,
                                 color = GrabGreen
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = GrabGreen.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = "v1.0",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GrabGreen,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
                         }
                         Text(
                             text = if (isToday) "วันนี้, ${DateUtils.formatThaiDateFull(selectedDateString)}" else DateUtils.formatThaiDateFull(selectedDateString),
@@ -199,32 +211,48 @@ fun DashboardScreen(
                         )
                     }
 
-                    if (!isToday) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = GrabGreen.copy(alpha = 0.15f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .clickable { viewModel.selectToday() }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (!isToday) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = GrabGreen.copy(alpha = 0.15f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .clickable { viewModel.selectToday() }
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Today,
-                                    contentDescription = "กลับไปวันนี้",
-                                    tint = GrabGreen,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "กลับไปวันนี้",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GrabGreen
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Today,
+                                        contentDescription = "กลับไปวันนี้",
+                                        tint = GrabGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "กลับไปวันนี้",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GrabGreen
+                                    )
+                                }
                             }
+                        }
+
+                        IconButton(
+                            onClick = { showSettingsDialog = true },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "ตั้งค่า",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -319,7 +347,7 @@ fun DashboardScreen(
             }
 
             // แถบเลือกรถ & ราคาน้ำมันวันนี้
-            item {
+            item(key = "daily_fuel_banner") {
                 DailyFuelBanner(
                     selectedVehicle = selectedVehicle,
                     fuelPrice = fuelPrice,
@@ -336,12 +364,21 @@ fun DashboardScreen(
             }
 
             // การ์ดสรุปยอดกำไรสุทธิ รายได้ ค่าน้ำมัน
-            item {
+            item(key = "summary_card") {
                 SummaryCard(summary = dailySummary)
             }
 
             // หัวข้อรายการรอบของวันที่เลือก
-            item {
+            item(key = "trips_header") {
+                val paidCount = dailySummary.totalTripsCount
+                val deadheadCount = trips.count { it.fare == 0.0 }
+                val dateLabel = if (isToday) "วันนี้" else "วันที่ ${DateUtils.formatThaiDateShort(selectedDateString)}"
+                val headerText = if (deadheadCount > 0) {
+                    "รายการรอบของ$dateLabel ($paidCount รอบ • ตีรถเปล่า $deadheadCount)"
+                } else {
+                    "รายการรอบของ$dateLabel ($paidCount รอบ)"
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -350,7 +387,7 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AnimatedContent(
-                        targetState = if (isToday) "รายการรอบของวันนี้ (${trips.size} รอบ)" else "รายการรอบวันที่ ${DateUtils.formatThaiDateShort(selectedDateString)} (${trips.size} รอบ)",
+                        targetState = headerText,
                         transitionSpec = {
                             fadeIn(tween(200)) togetherWith fadeOut(tween(150))
                         },
@@ -365,50 +402,198 @@ fun DashboardScreen(
                 }
             }
 
-            if (trips.isEmpty()) {
-                item {
+            // แถบ Filter รายการรอบ: ทั้งหมด / เฉพาะรอบปกติ / รอบเปล่า (เริ่มต้นที่เฉพาะรอบปกติ)
+            item(key = "trip_filter_bar") {
+                val totalCount = trips.size
+                val paidCount = trips.count { it.fare > 0.0 }
+                val deadheadCount = trips.count { it.fare == 0.0 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TripFilter.values().forEach { filter ->
+                        val isSelected = tripFilter == filter
+                        val (filterTitle, count) = when (filter) {
+                            TripFilter.ALL -> "ทั้งหมด" to totalCount
+                            TripFilter.PAID_ONLY -> "รอบปกติ" to paidCount
+                            TripFilter.DEADHEAD -> "รอบเปล่า" to deadheadCount
+                        }
+
+                        val activeColor = if (filter == TripFilter.DEADHEAD) CostOrange else GrabGreen
+
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setTripFilter(filter) },
+                            label = {
+                                Text(
+                                    text = "$filterTitle ($count)",
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = activeColor.copy(alpha = 0.15f),
+                                selectedLabelColor = activeColor,
+                                selectedLeadingIconColor = activeColor
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                selectedBorderColor = activeColor,
+                                selectedBorderWidth = 1.5.dp
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+            }
+
+            if (filteredTrips.isEmpty()) {
+                item(key = "empty_trips_state") {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 16.dp),
+                            .padding(vertical = 12.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
+                                .padding(28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = if (isToday) "🛵 ยังไม่มีบันทึกรอบวิ่งในวันนี้" else "🛵 ไม่มีบันทึกรอบวิ่งในวันที่ ${DateUtils.formatThaiDateShort(selectedDateString)}",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (isToday) "กดปุ่ม 'บันทึกรอบใหม่ (ด่วน)' ด้านล่างเพื่อเริ่มบันทึก" else "กดปุ่มด้านล่างเพื่อบันทึกรอบย้อนหลังของวันนี้",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
+                            if (trips.isEmpty()) {
+                                Text(
+                                    text = if (isToday) "🛵 ยังไม่มีบันทึกรอบวิ่งในวันนี้" else "🛵 ไม่มีบันทึกรอบวิ่งในวันที่ ${DateUtils.formatThaiDateShort(selectedDateString)}",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isToday) "กดปุ่ม 'บันทึกรอบใหม่ (ด่วน)' ด้านล่างเพื่อเริ่มบันทึก" else "กดปุ่มด้านล่างเพื่อบันทึกรอบย้อนหลังของวันนี้",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            } else {
+                                val totalCount = trips.size
+                                val paidCount = trips.count { it.fare > 0.0 }
+                                val deadheadCount = trips.count { it.fare == 0.0 }
+
+                                when (tripFilter) {
+                                    TripFilter.PAID_ONLY -> {
+                                        Text(
+                                            text = "ไม่มีรอบปกติ",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "มีรอบตีรถเปล่าบันทึกไว้ $deadheadCount รอบ",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { viewModel.setTripFilter(TripFilter.DEADHEAD) },
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("ดูรอบตีรถเปล่า ($deadheadCount)", color = CostOrange)
+                                            }
+                                            Button(
+                                                onClick = { viewModel.setTripFilter(TripFilter.ALL) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = GrabGreen),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("ดูทั้งหมด ($totalCount)")
+                                            }
+                                        }
+                                    }
+                                    TripFilter.DEADHEAD -> {
+                                        Text(
+                                            text = "ไม่มีรอบตีรถเปล่า",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "มีรอบวิ่งปกติบันทึกไว้ $paidCount รอบ",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Button(
+                                                onClick = { viewModel.setTripFilter(TripFilter.PAID_ONLY) },
+                                                colors = ButtonDefaults.buttonColors(containerColor = GrabGreen),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("ดูรอบปกติ ($paidCount)")
+                                            }
+                                            OutlinedButton(
+                                                onClick = { viewModel.setTripFilter(TripFilter.ALL) },
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("ดูทั้งหมด ($totalCount)")
+                                            }
+                                        }
+                                    }
+                                    TripFilter.ALL -> {
+                                        Text(
+                                            text = "🛵 ไม่มีข้อมูลรอบวิ่ง",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             } else {
-                itemsIndexed(trips, key = { _, trip -> trip.id }) { index, trip ->
-                    val tripNumber = trips.size - index
+                items(
+                    items = filteredTrips,
+                    key = { trip -> trip.id },
+                    contentType = { "trip_card" }
+                ) { trip ->
+                    val isDeadhead = trip.fare == 0.0
+                    val paidTripNumber = if (!isDeadhead) {
+                        trips.filter { it.fare > 0.0 && (it.timestamp < trip.timestamp || (it.timestamp == trip.timestamp && it.id <= trip.id)) }.size
+                    } else 0
+
                     TripItemCard(
                         trip = trip,
-                        tripNumber = tripNumber,
+                        tripNumber = paidTripNumber,
                         onAddOrEditTip = { tripForAddTip = trip },
-                        onViewDetail = { tripForDetailId = trip.id },
-                        modifier = Modifier.animateItemPlacement()
+                        onViewDetail = { tripForDetailId = trip.id }
                     )
                 }
             }
 
-            item {
+            item(key = "bottom_spacer") {
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
@@ -423,12 +608,18 @@ fun DashboardScreen(
             fuelPricePerLiter = fuelPrice,
             vehicleType = selectedVehicle?.vehicleType ?: "MOTORCYCLE",
             idleLiterPerHour = selectedVehicle?.idleLiterPerHour ?: 0.15,
+            isIdleCalculationEnabled = isIdleCalculationEnabled,
             initialDateString = selectedDateString,
             onDismiss = { showQuickEntrySheet = false },
             onSaveTrip = { fare, tip, distance, dashKmL, duration, dateString ->
                 viewModel.saveTrip(fare, tip, distance, dashKmL, duration, dateString)
                 val msg = if (dateString == viewModel.todayDateString) "บันทึกรอบวิ่งสำเร็จ!" else "บันทึกรอบของวันที่ ${DateUtils.formatThaiDateShort(dateString)} สำเร็จ!"
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                if (dateString == selectedDateString) {
+                    coroutineScope.launch {
+                        listState.scrollToItem(0)
+                    }
+                }
             }
         )
     }
@@ -494,6 +685,19 @@ fun DashboardScreen(
                 viewModel.selectDate(newDate)
             },
             onDismiss = { showDatePickerDialog = false }
+        )
+    }
+
+    // Dialog ตั้งค่าการใช้งานแอป (เปิด-ปิด การคำนวณ Idle)
+    if (showSettingsDialog) {
+        AppSettingsDialog(
+            isIdleCalculationEnabled = isIdleCalculationEnabled,
+            onToggleIdleCalculation = { enabled ->
+                viewModel.setIdleCalculationEnabled(enabled)
+            },
+            onOpenVehicleSettings = { showVehicleDialog = true },
+            onOpenFuelSettings = { showEditFuelDialog = true },
+            onDismiss = { showSettingsDialog = false }
         )
     }
 }

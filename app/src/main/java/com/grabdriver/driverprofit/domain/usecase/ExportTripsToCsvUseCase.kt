@@ -17,13 +17,18 @@ class ExportTripsToCsvUseCase {
         sb.append("วันที่,เวลา,รอบที่,ค่ารอบ(บาท),ทิป(บาท),รายได้รวม(บาท),ระยะทาง(กม.),เวลาในรอบ(นาที),เวลารถติด(นาที),หน้าปัด(km/L),อัตราสิ้นเปลืองจริง(km/L),ราคาน้ำมัน(บาท/L),ค่าน้ำมัน(บาท),กำไรสุทธิ(บาท)\n")
 
         val sortedTrips = trips.sortedBy { it.timestamp }
-        sortedTrips.forEachIndexed { index, trip ->
+        var paidCount = 0
+        sortedTrips.forEach { trip ->
             val timeStr = timeFormat.format(Date(trip.timestamp))
             val totalIncome = trip.fare + trip.tip
+            val tripLabel = if (trip.fare == 0.0) "ตีรถเปล่า" else {
+                paidCount++
+                paidCount.toString()
+            }
 
             sb.append("${trip.dateString},")
             sb.append("$timeStr,")
-            sb.append("${index + 1},")
+            sb.append("$tripLabel,")
             sb.append(String.format(Locale.US, "%.2f,", trip.fare))
             sb.append(String.format(Locale.US, "%.2f,", trip.tip))
             sb.append(String.format(Locale.US, "%.2f,", totalIncome))
